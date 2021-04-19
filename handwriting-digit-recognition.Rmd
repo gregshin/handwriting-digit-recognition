@@ -1,0 +1,175 @@
+---
+title: "digit recognization"
+author: "Gregory Shin"
+date: "11/7/2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(ggplot2)
+library(caret)
+library(dplyr)
+library(readr)
+library(klaR)
+library(e1071)
+library(rpart)
+library(rpart.plot)
+```
+
+## Introduction
+
+The purpose of this exploration is to determine the efficacy of different algorithms for use in handwriting recognition. This will be accomplished by building two separate models using decision tree induction and Naive Bayes and seeing which preforms better a better job at prediction.
+
+```{r import}
+# import the data set
+digitSet <- read_csv('Kaggle-digit-train.csv')
+head(digitSet, 5)
+
+```
+
+## Pre-processing
+
+The following observations and processing methods were utilized:
+
+* No duplicate rows were found.
+* The column "label" was converted into a factor for use as a class label.
+
+```{r preprocess}
+# duplicate dataset into new data frame for safety
+dataClean <- digitSet
+# convert class label from a double into factor
+dataClean <- mutate(dataClean, label=as.factor(label))
+```
+
+## Data Visualization
+
+```{r data visualization}
+# plot all attributes onto a histogram to see distribution
+digitViz <- ggplot(digitSet, aes(label)) + geom_histogram(bins=20) + theme_minimal() + scale_x_continuous(breaks=c(0,1,2,3,4,5,6,7,8,9))
+digitViz
+```
+
+## Decision Tree Induction
+
+```{r formula}
+
+# Train and Test partition creation
+create_train_test <- function(data, size = 0.8, train = TRUE) {
+    n_row = nrow(data)
+    total_row = size * n_row
+    train_sample <- 1: total_row
+    if (train == TRUE) {
+        return (data[train_sample, ])
+    } else {
+        return (data[-train_sample, ])
+    }
+}
+# create training partition
+digitTrain <- create_train_test(dataClean, 0.8, train=TRUE)
+# create testing partition
+digitTest <- create_train_test(dataClean, 0.8, train=FALSE)
+
+# Decision Tree model creation
+treeModel <- train(label ~., data=digitTrain, metric="Accuracy", method="rpart")
+
+print(treeModel)
+rpart.plot(treeModel$finalModel)
+barplot(treeModel$finalModel$variable.importance)
+
+```
+
+## Decision Tree Tuning
+
+```{r tree}
+
+# Adjusting Tune Length
+treeModelTune <- train(label ~.,data=digitTrain, method="rpart", metric="Accuracy", tuneLength=10)
+print(treeModelTune$finalModel)
+rpart.plot(treeModelTune$finalModel)
+barplot(treeModelTune$finalModel$variable.importance)
+
+# Model Evaluation using Cross-Verification x10
+tr_control <- trainControl(method = "cv", number = 10)
+digitModelCV <- train(label ~., data=digitTrain, method="rpart", metric="Accuracy", tuneLength=10, control=rpart.control(trcontrol=tr_control, na.rm=T))
+
+print(digitModelCV$finalModel)
+rpart.plot(digitModelCV$finalModel)
+barplot(digitModelCV$finalModel$variable.importance)
+
+```
+
+## Decision Tree Prediction
+
+```{r predict}
+
+treePredict <- predict(digitModelCV, newdata=digitTest, type = "raw")
+table('actual class'=digitTest$label, 'predicted class'=treePredict)
+treeErrorRate <- sum(digitTest$label != treePredict)/nrow(digitTest)
+print(paste0("Accuracy (Precision): ", 1 - treeErrorRate))
+
+```
+## Naive Bayes Pre-processing
+
+The e1071 package was used to create a Naive Bayes model. In order to prevent the occurence of classes with no predictors, all columns with zero variance were removed. 
+
+```{r nb}
+# remove all attributes with zero variance
+nbClean <- dplyr::select(dataClean, c(-pixel1,-pixel2,-pixel3,-pixel4,-pixel5,-pixel6,-pixel7,-pixel8,-pixel9,-pixel10,-pixel11,-pixel12,-pixel13,-pixel14,-pixel15,-pixel16,-pixel17,-pixel18,-pixel19,-pixel20,-pixel21,-pixel22,-pixel23,-pixel24,-pixel25,-pixel26,-pixel27,-pixel28,-pixel29,-pixel30,-pixel31,-pixel32,-pixel33,-pixel34,-pixel35,-pixel36,-pixel37,-pixel38,-pixel39,-pixel40,-pixel41,-pixel42,-pixel43,-pixel44,-pixel45,-pixel46,-pixel47,-pixel48,-pixel49,-pixel50,-pixel51,-pixel52,-pixel53,-pixel54,-pixel55,-pixel56,-pixel57,-pixel58,-pixel59,-pixel60,-pixel61,-pixel62,-pixel63,-pixel64,-pixel65,-pixel66,-pixel67,-pixel68,-pixel69,-pixel70,-pixel71,-pixel72,-pixel73,-pixel74,-pixel75,-pixel76,-pixel77,-pixel78,-pixel79,-pixel80,-pixel81,-pixel82,-pixel83,-pixel84,-pixel85,-pixel86,-pixel87,-pixel88,-pixel89,-pixel90,-pixel91,-pixel92,-pixel93,-pixel94,-pixel95,-pixel96,-pixel97,-pixel98,-pixel99,-pixel100,-pixel101,-pixel102,-pixel103,-pixel104,-pixel105,-pixel106,-pixel107,-pixel108,-pixel109,-pixel110,-pixel111,-pixel112,-pixel113,-pixel114,-pixel115,-pixel116,-pixel117,-pixel130,-pixel131,-pixel132,-pixel134,-pixel135,-pixel136,-pixel137,-pixel138,-pixel139,-pixel140,-pixel141,-pixel142,-pixel143,-pixel144,-pixel145,-pixel163,-pixel164,-pixel165,-pixel166,-pixel167,-pixel168,-pixel169,-pixel170,-pixel171,-pixel193,-pixel194,-pixel195,-pixel196,-pixel197,-pixel198,-pixel199,-pixel221,-pixel222,-pixel223,-pixel224,-pixel225,-pixel226,-pixel227,-pixel249,-pixel250,-pixel251,-pixel252,-pixel253,-pixel254,-pixel255,-pixel278,-pixel279,-pixel280,-pixel281,-pixel282,-pixel283,-pixel306,-pixel307,-pixel308,-pixel309,-pixel310,-pixel311,-pixel334,-pixel335,-pixel336,-pixel337,-pixel338,-pixel339,-pixel360,-pixel362,-pixel363,-pixel364,-pixel365,-pixel366,-pixel367,-pixel388,-pixel389,-pixel390,-pixel391,-pixel392,-pixel393,-pixel394,-pixel395,-pixel417,-pixel418,-pixel419,-pixel105,-pixel106,-pixel107,-pixel108,-pixel109,-pixel110,-pixel111,-pixel112,-pixel113,-pixel114,-pixel115,-pixel116,-pixel117,-pixel130,-pixel131,-pixel132,-pixel134,-pixel135,-pixel136,-pixel137,-pixel138,-pixel139,-pixel140,-pixel141,-pixel142,-pixel143,-pixel144,-pixel145,-pixel163,-pixel164,-pixel165,-pixel166,-pixel167,-pixel168,-pixel169,-pixel170,-pixel171,-pixel193,-pixel194,-pixel195,-pixel196,-pixel197,-pixel198,-pixel199,-pixel221,-pixel222,-pixel223,-pixel224,-pixel225,-pixel226,-pixel227,-pixel249,-pixel250,-pixel251,-pixel252,-pixel253,-pixel254,-pixel255,-pixel278,-pixel279,-pixel280,-pixel281,-pixel282,-pixel283,-pixel306,-pixel307,-pixel308,-pixel309,-pixel310,-pixel311,-pixel334,-pixel335,-pixel336,-pixel337,-pixel338,-pixel339,-pixel360,-pixel362,-pixel363,-pixel364,-pixel365,-pixel366,-pixel367,-pixel388,-pixel389,-pixel390,-pixel391,-pixel392,-pixel393,-pixel394,-pixel395,-pixel417,-pixel418,-pixel419,-pixel420,-pixel421,-pixel422,-pixel423,-pixel445,-pixel446,-pixel447,-pixel448,-pixel449,-pixel450,-pixel451,-pixel473,-pixel474,-pixel475,-pixel476,-pixel477,-pixel478,-pixel479,-pixel501,-pixel502,-pixel503,-pixel504,-pixel505,-pixel506,-pixel507,-pixel508,-pixel529,-pixel530,-pixel531,-pixel532,-pixel533,-pixel534,-pixel535,-pixel557,-pixel558,-pixel559,-pixel560,-pixel561,-pixel562,-pixel563,-pixel585,-pixel586,-pixel587,-pixel588,-pixel589,-pixel590,-pixel591,-pixel613,-pixel614,-pixel615,-pixel616,-pixel617,-pixel618,-pixel619,-pixel620,-pixel640,-pixel641,-pixel642,-pixel643,-pixel644,-pixel645,-pixel646,-pixel647,-pixel648,-pixel649,-pixel650,-pixel667,-pixel668,-pixel669,-pixel670,-pixel671,-pixel672,-pixel673,-pixel674,-pixel675,-pixel676,-pixel677,-pixel678,-pixel679,-pixel680,-pixel681,-pixel682,-pixel693,-pixel694,-pixel695,-pixel696,-pixel697,-pixel698,-pixel699,-pixel700,-pixel701,-pixel702,-pixel703,-pixel704))
+
+# create new train and test groups
+nbTrain <- create_train_test(nbClean, 0.8, train = TRUE)
+nbTest <- create_train_test(nbClean, 0.8, train = FALSE)
+```
+
+## Naive Bayes Model
+
+```{r naive bayes}
+
+modelE1071 <- naiveBayes(nbTrain$label ~ ., data=nbTrain)
+summary(modelE1071)
+
+```
+
+## Naive Bayes Model Prediction
+
+```{r naive bayes prediction}
+
+predictE1701 <- predict(modelE1071, newdata=nbTest, type="class")
+table('actual class'=nbTest$label, 'predicted class'=predictE1701)
+nbErrorRate <- sum(nbTest$label != predictE1701)/nrow(nbTest)
+print(paste0("Accuracy (Precision): ", 1 - nbErrorRate))
+
+```
+
+## Naive Bayes Tuning
+
+```{r naive bayes tuned}
+
+# tuning with the best.tune method
+nbTune <- best.tune(naiveBayes, label~., data = nbTrain, predict.func = predict)
+summary(nbTune)
+
+predictNBTune <- predict(nbTune, newdata=nbTest, type="class")
+table('actual class'=nbTest$label, 'predicted class'=predictNBTune)
+nbTuneErrorRate <- sum(nbTest$label != predictNBTune)/nrow(nbTest)
+print(paste0("Accuracy (Precision): ", 1 - nbTuneErrorRate))
+
+# Tuning with Cross-Verification x10
+nbCvTune <- train(label~., data=nbTrain, trControl=trainControl(method="cv", number=10), method="naive_bayes")
+nbCvPredict <- predict(nbCvTune, newdata=nbTest, type="raw")
+table('actual class'=nbTest$label, 'predicted class'=nbCvPredict)
+nbCvErrorRate <- sum(nbTest$label != nbCvPredict)/nrow(nbTest)
+print(paste0("Accuracy (Precision): ", 1 - nbCvErrorRate))
+```
+
+## Algorithm Comparisons
+
+When comparing the initial, untuned versions of the Decision Tree model and the Naive Bayes model, the Decision Tree exhibited much worse performance than the Naive Bayes model. It can also be seen that, when viewing as a graphical tree, that the Decision Tree limited itself to only three levels in an effort to reduce overfitting. The Naive Bayes model, in comparison, performed better at prediction from the outset. This can be explained by comparing the algorithms themselves. 
+
+Decision Trees utilize chains of data to determine classification. Thus, with a data set that has a large number of attributes (in the case of digit recogniztion, 785), classification becomes a much more difficult task. One can tune a package, such as caret, with attributes, such as tuneLength, to force it to create a tree that encompasses all 10 digit possiblities, but that opens up the possibility of overfitting as the tree grows and become more intricate.
+
+Naive Bayes models, on the other hand, determine probabilities by considering all attributes to be independent from each other. Therefore, Naive Bayes algorithms are ideal for datasets where there are large numbers of attributes, or where there is a high amount of variance in the data. Without tuning, the Naive Bayes model had a much higher level of performance than the Decision Tree model.
+
+It should be noted that the Decision Tree model precision can be brought up to be similar to Naive Bayes precision through the use of tuning. However, one runs the risk of overfitting the to the test dataset, as the decision trees become very large and convoluted. It would be better to instead tune the Naive Bayes model to achieve a higher level of peformance in order to avoid the risks that come with Decision Trees.
